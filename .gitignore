@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# 开发客户端运行目录（世界、日志、截图都在里面，不入库）
+run/
+logs/
+*.log
+
+# 本地个人脚本与笔记（里面有本机路径）
+/使用说明.md
+/开发笔记.md
+/构建模组.bat
+/启动开发客户端.bat
+
+# 打包产物
+*.zip
+
+# 系统
+Thumbs.db
+.DS_Store
+desktop.ini
