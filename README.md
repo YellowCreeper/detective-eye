@@ -7,9 +7,11 @@ _中文名：侦探之眼_
 
 A **client-side** ore/block highlighter for **Minecraft 1.20.1 Forge**. Press a key, pick any blocks you care about, and their outlines show through terrain — no server-side installation required.
 
-![screenshot](docs/screenshot.png)
+![Three tracked blocks, each in its own colour](docs/screenshot.png)
 
 ## Features
+
+![Outlines drawn through stone](docs/through-wall.png)
 
 - **See through walls** — outlines are drawn with depth test disabled, so ores behind stone are visible.
 - **Any block, not just ores** — chests, spawners, ancient debris, your base's beacons… pick up to 8 blocks, each with its own colour.
@@ -29,6 +31,8 @@ A **client-side** ore/block highlighter for **Minecraft 1.20.1 Forge**. Press a 
 All of them can be rebound in **Options → Controls → Vein Outline**.
 
 In the picker: **left click** selects/deselects a block (max 8), **right click** cycles its colour, there are tabs for ores / building / plants / redstone / selected, plus a list of recently used blocks.
+
+![Block picker](docs/picker.png)
 
 ## Installation
 
@@ -88,9 +92,11 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 
 **Minecraft 1.20.1 Forge 纯客户端**的方块透视模组：按一个键，选你想看的方块，它们的轮廓会穿透地形显示出来，不需要在服务端装任何东西。
 
-![screenshot](docs/screenshot.png)
+![三种方块各用一种颜色标出：下界合金块 / 远古残骸 / 钻石块](docs/screenshot.png)
 
 ## 功能
+
+![隔着石头也能看到轮廓](docs/through-wall.png)
 
 - **穿墙显示** —— 关掉了深度测试，隔着石头也能看见后面的矿石。
 - **不限于矿石** —— 箱子、刷怪笼、远古残骸、你家信标…… 最多同时选 8 种方块，每种一个颜色。
@@ -108,6 +114,8 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 | `小键盘 3` | 打开方块选择界面 |
 
 都可以在 **选项 → 控制 → 矿脉轮廓** 里改。界面里：**左键**选中/取消（上限 8 个），**右键**换颜色，顶部有 矿石 / 建筑 / 植物 / 红石 / 已选 分类和「最近使用」。
+
+![方块选择界面](docs/picker.png)
 
 ## 安装
 
