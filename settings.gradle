@@ -1,0 +1,13 @@
+pluginManagement {
+    repositories {
+        // 本机实测：bmclapi2 在 JVM 里可达（会 302 到 cernet/unicom，但能走通）；
+        // 直连 mirrors.ustc.edu.cn 反而被拒（Connection refused）。
+        maven { name = 'BMCLAPI'; url = 'https://bmclapi2.bangbang93.com/maven/' }
+        maven { name = 'BMCLAPI-UNICOM'; url = 'https://unicom.mirrors.ustc.edu.cn/bmclapi/' }
+        maven { name = 'AliyunPlugin'; url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'orevision'

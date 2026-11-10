@@ -1,0 +1,73 @@
+// Detective Eye — Minecraft 1.20.1 Forge client-side block highlighter
+// https://github.com/<you>/orevision
+
+// 加 -PcnMirrors 时优先走国内镜像（BMCLAPI），默认用 Forge 官方源。
+buildscript {
+    repositories {
+        if (gradle.startParameter.projectProperties.containsKey('cnMirrors')) {
+            maven { name = 'BMCLAPI'; url = 'https://bmclapi2.bangbang93.com/maven/' }
+            maven { name = 'BMCLAPI-UNICOM'; url = 'https://unicom.mirrors.ustc.edu.cn/bmclapi/' }
+            maven { name = 'Aliyun'; url = 'https://maven.aliyun.com/repository/public' }
+        }
+        maven { name = 'MinecraftForge'; url = 'https://maven.minecraftforge.net/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '6.0.54'
+    }
+}
+
+plugins { id 'java' }
+
+def cn = gradle.startParameter.projectProperties.containsKey('cnMirrors')
+
+// ForgeGradle 在 apply 阶段就会抓取 project.repositories，之后再加的仓库对它无效，
+// 所以必须在 apply 之前声明。
+repositories {
+    if (cn) {
+        maven { name = 'BMCLAPI'; url = 'https://bmclapi2.bangbang93.com/maven/' }
+        maven { name = 'BMCLAPI-UNICOM'; url = 'https://unicom.mirrors.ustc.edu.cn/bmclapi/' }
+        maven { name = 'Aliyun'; url = 'https://maven.aliyun.com/repository/public' }
+    }
+    maven { name = 'MinecraftForge'; url = 'https://maven.minecraftforge.net/' }
+    mavenCentral()
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+
+group = 'com.orevision'
+version = '1.0.0'
+base { archivesName = 'detective-eye' }
+
+java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.console.level', 'info'
+            mods { orevision { source sourceSets.main } }
+        }
+    }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.4.28'
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : 'orevision',
+                'Specification-Vendor'    : 'orevision',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.version,
+                'Implementation-Vendor'   : 'orevision'
+        ])
+    }
+}

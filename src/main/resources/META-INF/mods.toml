@@ -1,0 +1,16 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="orevision"
+version="${file.jarVersion}"
+displayName="Detective Eye"
+authors="Herob"
+description='''
+Client-side block highlighter. Press H to toggle, numpad 3 to pick blocks.
+Tracked blocks are outlined through walls while the overlay is on. Pure client side: safe to join servers that do not have it installed.
+'''
+
+# 纯客户端模组的关键行：不给服务端加版本校验，否则进别人的服务器会被判定 mod 列表不匹配
+displayTest="IGNORE_SERVER_VERSION"
