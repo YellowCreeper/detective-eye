@@ -36,7 +36,7 @@ repositories {
 apply plugin: 'net.minecraftforge.gradle'
 
 group = 'com.orevision'
-version = '1.0.0'
+version = '1.1.0'
 base { archivesName = 'detective-eye' }
 
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
@@ -48,6 +48,13 @@ minecraft {
         client {
             workingDirectory project.file('run')
             property 'forge.logging.console.level', 'info'
+            // 开发期自检开关：gradle runClient -Dorevision.selftest=true
+            property 'orevision.selftest', System.getProperty('orevision.selftest', 'false')
+            // LWJGL 需要把 natives 解压到一个可写的临时目录；在 DSH 沙箱里 TEMP 会指向 /tmp，
+            // Java 认不出这个 MSYS 路径，会报 "Failed to find an appropriate directory to extract the native library"。
+            def javaTmpDir = project.file('../tmp/javatmp')
+            javaTmpDir.mkdirs()
+            jvmArgs "-Djava.io.tmpdir=${javaTmpDir.absolutePath}"
             mods { orevision { source sourceSets.main } }
         }
     }
@@ -58,6 +65,9 @@ dependencies {
 }
 
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+// 注意：不要试图改 build/classpath/runClient_minecraftClasspath.txt 来剔除 x86/arm64 natives，
+// 那是 prepareRunClient 的产物、每轮都会重写，且真正卡住启动的是上面的 java.io.tmpdir。
 
 tasks.named('jar', Jar).configure {
     manifest {

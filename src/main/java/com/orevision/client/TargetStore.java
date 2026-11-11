@@ -30,10 +30,10 @@ import java.util.Map;
  * 因为这里要频繁地增删改，用 JSON 自己读写更直接。</p>
  */
 public final class TargetStore {
-    /** 上限 8：再多颜色就分不清了。 */
-    public static final int MAX_TARGETS = 8;
+    /** 上限 16：够用且颜色还能分得开（调色板正好 16 色）。 */
+    public static final int MAX_TARGETS = 16;
 
-    /** 预设调色板，顺序即"自动分配"的优先级，8 色对应 8 个上限。 */
+    /** 预设调色板，顺序即"自动分配"的优先级，16 色对应 16 个上限。 */
     public static final int[] PALETTE = {
             0x4AEDD9, // 青
             0xFF9F1C, // 橙
@@ -42,7 +42,15 @@ public final class TargetStore {
             0x5CE65C, // 绿
             0xB37BFF, // 紫
             0x4D9BFF, // 蓝
-            0xFF5A5A  // 红
+            0xFF5A5A, // 红
+            0x00E5FF, // 天蓝
+            0x9AE66E, // 黄绿
+            0xFF7A00, // 深橙
+            0xC77DFF, // 淡紫
+            0xFF3B8D, // 玫红
+            0x8FA8FF, // 长春花蓝
+            0xFFD166, // 金
+            0x00FFC2  // 春绿
     };
 
     public record Target(ResourceLocation id, int color) {
@@ -55,6 +63,8 @@ public final class TargetStore {
     private static final int RECENT_MAX = 24;
     private static final Map<Block, Target> LOOKUP = new HashMap<>();
     private static boolean loaded;
+    /** 是否把模组方块也纳入选择列表（选择界面右上角的开关，记在同一个 json 里）。 */
+    private static boolean includeModded;
     /** 每次改动 +1，扫描器靠它发现自己需要重扫。 */
     private static int version;
 
@@ -80,6 +90,32 @@ public final class TargetStore {
 
     public static int version() {
         return version;
+    }
+
+    public static boolean includeModded() {
+        load();
+        return includeModded;
+    }
+
+    public static void setIncludeModded(boolean value) {
+        load();
+        includeModded = value;
+    }
+
+    /** 关掉模组方块时用：把所有非 minecraft 命名空间的目标移除，返回移除了几个。 */
+    public static int removeModded() {
+        load();
+        int removed = 0;
+        for (int i = TARGETS.size() - 1; i >= 0; i--) {
+            if (!"minecraft".equals(TARGETS.get(i).id().getNamespace())) {
+                TARGETS.remove(i);
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            rebuild();
+        }
+        return removed;
     }
 
     /** 扫描热路径用：方块 → 目标（没被追踪返回 null）。 */
@@ -221,7 +257,11 @@ public final class TargetStore {
             if (!root.isJsonObject()) {
                 return;
             }
-            JsonArray array = root.getAsJsonObject().getAsJsonArray("targets");
+            JsonObject rootObject = root.getAsJsonObject();
+            if (rootObject.has("includeModdedBlocks")) {
+                includeModded = rootObject.get("includeModdedBlocks").getAsBoolean();
+            }
+            JsonArray array = rootObject.getAsJsonArray("targets");
             if (array != null) {
                 for (JsonElement element : array) {
                     if (!element.isJsonObject() || TARGETS.size() >= MAX_TARGETS) {
@@ -240,7 +280,7 @@ public final class TargetStore {
                 }
             }
 
-            JsonArray recentArray = root.getAsJsonObject().getAsJsonArray("recent");
+            JsonArray recentArray = rootObject.getAsJsonArray("recent");
             if (recentArray != null) {
                 for (JsonElement element : recentArray) {
                     if (RECENT.size() >= RECENT_MAX || !element.isJsonPrimitive()) {
@@ -260,6 +300,7 @@ public final class TargetStore {
 
     public static void save() {
         JsonObject root = new JsonObject();
+        root.addProperty("includeModdedBlocks", includeModded);
         JsonArray array = new JsonArray();
         for (Target t : TARGETS) {
             JsonObject object = new JsonObject();

@@ -7,6 +7,8 @@ _中文名：侦探之眼_
 
 A **client-side** ore/block highlighter for **Minecraft 1.20.1 Forge**. Press a key, pick any blocks you care about, and their outlines show through terrain — no server-side installation required.
 
+Tested on **BetterMC for Forge 1.20.1 (360+ mods)**: the modded index scans fine and vanilla + modded blocks can be tracked at the same time.
+
 ![Three tracked blocks, each in its own colour](docs/screenshot.png)
 
 ## Features
@@ -14,7 +16,8 @@ A **client-side** ore/block highlighter for **Minecraft 1.20.1 Forge**. Press a 
 ![Outlines drawn through stone](docs/through-wall.png)
 
 - **See through walls** — outlines are drawn with depth test disabled, so ores behind stone are visible.
-- **Any block, not just ores** — chests, spawners, ancient debris, your base's beacons… pick up to 8 blocks, each with its own colour.
+- **Any block, not just ores** — chests, spawners, ancient debris, your base's beacons… pick up to 16 blocks, each with its own colour.
+- **Modded blocks, on demand** — one click on `Modded blocks: Off` scans every block registered by your whole modpack (hundreds of mods, tens of thousands of blocks) in the background and adds a `Modded` tab. Leave it off and only vanilla blocks are ever touched.
 - **Pinyin search** — type `zuanshi`, `zsks`, `kuang` or `钻石` in the picker (Chinese names, pinyin, and initials all work).
 - **Adjustable radius** — `[` and `]` shrink/grow the scan range (8–128 blocks) on the fly.
 - **Cheap when idle** — nothing runs while the overlay is off; scanning happens once per second and is skipped entirely for chunks that don't contain a tracked block.
@@ -30,7 +33,9 @@ A **client-side** ore/block highlighter for **Minecraft 1.20.1 Forge**. Press a 
 
 All of them can be rebound in **Options → Controls → Vein Outline**.
 
-In the picker: **left click** selects/deselects a block (max 8), **right click** cycles its colour, there are tabs for ores / building / plants / redstone / selected, plus a list of recently used blocks.
+In the picker: **left click** selects/deselects a block (max 16), **right click** cycles its colour, there are tabs for ores / building / plants / redstone / modded / selected, plus a list of recently used blocks.
+
+The button in the top-right corner (`Modded blocks: Off`) is the modded-block switch. Turning it on builds the index in the background — the button shows progress, the game stays playable — then the button reads `Modded blocks: On · 23,481` and a `Modded` tab appears. Turning it off removes every modded block from your selection and frees the index again. The state is remembered in `config/orevision-targets.json`.
 
 ![Block picker](docs/picker.png)
 
@@ -49,8 +54,8 @@ Requires **Java 17**.
 
 ```toml
 [general]
-    # Scan radius in blocks (8–128)
-    maxDistance = 48.0
+    # Scan radius in blocks (4–128)
+    maxDistance = 16.0
     # Maximum number of outlines rendered at once (8–4000)
     maxOres = 300
 ```
@@ -79,7 +84,8 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 
 ## Known limitations
 
-- Only blocks with an item form are listed in the picker, and only vanilla `minecraft:` namespaces — blocks added by other mods aren't shown yet.
+- The modded index is built in the client and not cached on disk: after a restart the first build takes a couple of seconds on a 300+ mod pack (progress is shown in the button).
+- Blocks without an item form (fluids, technical blocks) use the block model's particle texture as their icon.
 - Outlines are axis-aligned boxes; there's no fancy glow or particle effect.
 
 ## License
@@ -92,6 +98,8 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 
 **Minecraft 1.20.1 Forge 纯客户端**的方块透视模组：按一个键，选你想看的方块，它们的轮廓会穿透地形显示出来，不需要在服务端装任何东西。
 
+已在 **BetterMC（Forge 1.20.1，360+ 模组）** 实测：模组索引扫描正常，原版方块和模组方块可以同时追踪。
+
 ![三种方块各用一种颜色标出：下界合金块 / 远古残骸 / 钻石块](docs/screenshot.png)
 
 ## 功能
@@ -99,7 +107,8 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 ![隔着石头也能看到轮廓](docs/through-wall.png)
 
 - **穿墙显示** —— 关掉了深度测试，隔着石头也能看见后面的矿石。
-- **不限于矿石** —— 箱子、刷怪笼、远古残骸、你家信标…… 最多同时选 8 种方块，每种一个颜色。
+- **不限于矿石** —— 箱子、刷怪笼、远古残骸、你家信标…… 最多同时选 16 种方块，每种一个颜色。
+- **模组方块按需载入** —— 点一下右上角的「模组方块：关」，它会在后台把整个整合包里所有模组注册的方块扫一遍（几百个模组、几万个方块），扫完多出一个「模组」标签页。不点就一直只碰原版方块。
 - **拼音搜索** —— 在界面里输 `zuanshi`、`zsks`、`kuang` 或「钻石」都能搜到。
 - **范围可调** —— `[` 和 `]` 实时缩小/扩大扫描半径（8–128 格）。
 - **闲着不耗性能** —— 关闭时不跑任何逻辑；开启时每秒扫一次，不含目标方块的区块直接跳过。
@@ -113,7 +122,9 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 | `[` / `]` | 缩小 / 扩大扫描范围 |
 | `小键盘 3` | 打开方块选择界面 |
 
-都可以在 **选项 → 控制 → 矿脉轮廓** 里改。界面里：**左键**选中/取消（上限 8 个），**右键**换颜色，顶部有 矿石 / 建筑 / 植物 / 红石 / 已选 分类和「最近使用」。
+都可以在 **选项 → 控制 → 矿脉轮廓** 里改。界面里：**左键**选中/取消（上限 16 个），**右键**换颜色，顶部有 矿石 / 建筑 / 植物 / 红石 / 模组 / 已选 分类和「最近使用」。
+
+右上角的按钮就是模组方块总开关。打开后后台建索引，按钮上显示进度，游戏不会卡住；建完变成 `模组方块：开 · 23,481`，同时多出一个「模组」标签页。关掉会把已选的模组方块一并移除并释放索引。这个开关的状态记在 `config/orevision-targets.json` 里。
 
 ![方块选择界面](docs/picker.png)
 
@@ -132,7 +143,7 @@ If you're on a network where `maven.minecraftforge.net` is slow or unreachable, 
 
 ```toml
 [general]
-    maxDistance = 48.0   # 扫描半径，单位格（8–128）
+    maxDistance = 16.0   # 扫描半径，单位格（4–128）
     maxOres = 300        # 同时显示的最大轮廓数（8–4000）
 ```
 
@@ -160,7 +171,8 @@ cd detective-eye
 
 ## 已知限制
 
-- 选择列表里只有带物品形式的方块，且只收 `minecraft:` 命名空间的 —— 其他模组加的方块暂时不显示。
+- 模组方块索引建在客户端且不落盘：重启游戏后第一次打开要重新扫一遍，300+ 模组的包大约 1–3 秒（按钮上显示进度）。
+- 没有物品形式的方块（流体、技术方块）用方块模型的粒子贴图当图标。
 - 轮廓是轴对齐的方框，没有发光或粒子效果。
 
 ## 协议

@@ -14,23 +14,21 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 追踪方块选择界面：分类标签 + 搜索 + 图标网格 + 已选列表。
  *
- * <p>左边是原版全部方块（约 800 个，已排除空气/液体/技术方块），可以按分类筛选、滚动、搜索；
- * 左键勾选或取消，右键给已选方块换颜色；右边列出已选项和它当前的框线颜色，
+ * <p>左边默认只有原版方块（约 800 个）。右上角的开关会把模组方块也载入（后台构建，
+ * 整合包里通常有几千到几万个），载入后多出一个"模组"标签页专门筛这部分。</p>
+ *
+ * <p>左键勾选或取消，右键给已选方块换颜色；右边列出已选项和它当前的框线颜色，
  * 点名字会跳到列表里那一项。</p>
  */
 public class TargetScreen extends Screen {
@@ -47,46 +45,10 @@ public class TargetScreen extends Screen {
     private static final int ENTRY_H = 22;
     /** 右侧"最近"区域的图标格子边长。 */
     private static final int RECENT_CELL = 18;
+    /** 搜索结果上限，避免在几万个方块里一次渲染太多行。 */
+    private static final int SEARCH_RESULT_CAP = 6000;
 
-    /** 这些方块没有"形状"或不适合追踪，直接不进列表。 */
-    private static final Set<String> HIDDEN = new LinkedHashSet<>(List.of(
-            "air", "cave_air", "void_air", "moving_piston", "piston_head", "bubble_column",
-            "light", "structure_void", "fire", "soul_fire", "nether_portal", "end_portal", "end_gateway"));
-
-    private static final String[] ORE_WORDS = {"_ore", "ancient_debris"};
-    /** 没带 _ore 但明显属于矿物类的：原矿块、矿物压缩块、紫水晶。 */
-    private static final Set<String> ORE_EXTRA = Set.of(
-            "coal_block", "iron_block", "copper_block", "gold_block", "diamond_block", "emerald_block",
-            "lapis_block", "redstone_block", "netherite_block", "quartz_block",
-            "raw_iron_block", "raw_copper_block", "raw_gold_block",
-            "amethyst_block", "budding_amethyst", "amethyst_cluster",
-            "large_amethyst_bud", "medium_amethyst_bud", "small_amethyst_bud");
-    private static final String[] PLANT_WORDS = {
-            "leaves", "_log", "_wood", "planks", "sapling", "flower", "tulip", "grass", "fern",
-            "wheat", "carrot", "potato", "beetroot", "melon", "pumpkin", "bamboo", "cactus", "vine",
-            "mushroom", "roots", "kelp", "coral", "wart", "azalea", "moss", "lily", "sugar_cane",
-            "dripleaf", "lichen", "sea_pickle", "chorus", "cocoa", "spore_blossom", "mangrove",
-            "propagule", "hanging_roots", "pale_moss", "bush"};
-    private static final String[] REDSTONE_WORDS = {
-            "redstone", "piston", "observer", "dispenser", "dropper", "hopper", "repeater",
-            "comparator", "_rail", "button", "lever", "pressure_plate", "tripwire", "daylight",
-            "target_block", "note_block", "jukebox", "crafter", "sculk_sensor", "sculk_shrieker",
-            "tnt", "_door", "_trapdoor", "fence_gate", "bell", "respawn_anchor", "beacon", "conduit",
-            "lodestone", "lectern"};
-    private static final String[] BUILDING_WORDS = {
-            "stone", "brick", "concrete", "terracotta", "glass", "wool", "sandstone", "quartz",
-            "copper", "deepslate", "slab", "stairs", "wall", "fence", "carpet", "glazed", "tuff",
-            "mud", "basalt", "blackstone", "dripstone", "calcite", "andesite", "diorite", "granite",
-            "prismarine", "purpur", "netherrack", "soul_sand", "soul_soil", "magma", "obsidian",
-            "bedrock", "_block", "bone_block", "honey", "hay_block", "snow", "ice", "amethyst",
-            "sculk", "pale_", "resin"};
-
-    private static List<ResourceLocation> allBlocks;
-    private static final Map<ResourceLocation, String> NAMES = new HashMap<>();
-    /** 每个方块中文名的拼音搜索键（全拼变体 + 首字母变体），懒计算后缓存。 */
-    private static final Map<ResourceLocation, String> PINYIN = new HashMap<>();
     private static final Map<ResourceLocation, ItemStack> STACKS = new HashMap<>();
-    private static final Map<ResourceLocation, Integer> CATEGORIES = new HashMap<>();
 
     private enum Tab {
         ALL("screen.orevision.tab.all", -1),
@@ -94,6 +56,7 @@ public class TargetScreen extends Screen {
         BUILDING("screen.orevision.tab.building", 1),
         PLANT("screen.orevision.tab.plant", 2),
         REDSTONE("screen.orevision.tab.redstone", 3),
+        MODDED("screen.orevision.tab.modded", -2),
         SELECTED("screen.orevision.tab.selected", -3);
 
         private final String key;
@@ -113,6 +76,8 @@ public class TargetScreen extends Screen {
     private EditBox searchBox;
     private Tab tab = Tab.ALL;
     private int scrollRow;
+    /** 上一帧的构建状态，用来发现"刚好建完"并刷新列表。 */
+    private boolean wasBuilding;
 
     public TargetScreen() {
         super(Component.translatable("screen.orevision.targets.title"));
@@ -141,6 +106,12 @@ public class TargetScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("screen.orevision.done"), b -> this.onClose())
                 .bounds(gridRight - 70, this.height - 30, 70, 20).build());
 
+        // 上次开着模组方块但没有走完构建（比如中途退出游戏），进来就继续建
+        if (TargetStore.includeModded() && !BlockIndex.hasFull() && !BlockIndex.building()) {
+            BlockIndex.startFullBuild();
+        }
+        wasBuilding = BlockIndex.building();
+
         if (filtered.isEmpty()) {
             refreshFilter(searchBox.getValue());
         }
@@ -167,47 +138,64 @@ public class TargetScreen extends Screen {
         return Math.max(0, rows - rowsVisible());
     }
 
+    /** 已选列表的行高：目标多的时候自动压扁，保证 16 个也放得下。 */
+    private int entryH() {
+        int available = this.height - BOTTOM - (SEARCH_Y + 20) - 90;
+        return Mth.clamp(available / TargetStore.MAX_TARGETS, 12, ENTRY_H);
+    }
+
     private void refreshFilter(String text) {
         filtered.clear();
         String needle = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
 
         List<ResourceLocation> source;
-        switch (tab) {
-            case SELECTED -> {
-                source = new ArrayList<>();
-                for (TargetStore.Target target : TargetStore.targets()) {
-                    source.add(target.id());
-                }
+        if (tab == Tab.SELECTED) {
+            source = new ArrayList<>();
+            for (TargetStore.Target target : TargetStore.targets()) {
+                source.add(target.id());
             }
-            default -> source = allBlocks();
+        } else {
+            source = BlockIndex.current();
         }
 
         for (ResourceLocation id : source) {
-            if (tab.category == 0 && categoryOf(id) != 0) {
+            if (tab == Tab.MODDED && !BlockIndex.isModded(id)) {
                 continue;
             }
-            if (tab.category == 1 && categoryOf(id) != 1) {
+            if (tab.category >= 0 && BlockIndex.categoryOf(id) != tab.category) {
                 continue;
             }
-            if (tab.category == 2 && categoryOf(id) != 2) {
-                continue;
-            }
-            if (tab.category == 3 && categoryOf(id) != 3) {
-                continue;
-            }
-            if (!needle.isEmpty()
-                    && !nameOf(id).toLowerCase(Locale.ROOT).contains(needle)
-                    && !pinyinOf(id).contains(needle)
-                    && !id.toString().contains(needle)) {
+            if (!needle.isEmpty() && !matches(id, needle)) {
                 continue;
             }
             filtered.add(id);
+            if (filtered.size() >= SEARCH_RESULT_CAP) {
+                break;
+            }
         }
         scrollRow = Mth.clamp(scrollRow, 0, maxScrollRow());
     }
 
+    private static boolean matches(ResourceLocation id, String needle) {
+        if (BlockIndex.nameLower(id).contains(needle)) {
+            return true;
+        }
+        if (BlockIndex.pinyinOf(id).contains(needle)) {
+            return true;
+        }
+        return id.getPath().contains(needle) || id.getNamespace().contains(needle);
+    }
+
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        // 后台构建刚好结束 → 换成全量列表
+        if (wasBuilding && !BlockIndex.building()) {
+            wasBuilding = false;
+            refreshFilter(searchBox.getValue());
+        } else if (!wasBuilding && BlockIndex.building()) {
+            wasBuilding = true;
+        }
+
         renderBackground(gg);
         gg.drawCenteredString(this.font, this.title, this.width / 2, TITLE_Y, 0xFFFFFF);
         renderTabs(gg, mouseX, mouseY);
@@ -242,7 +230,7 @@ public class TargetScreen extends Screen {
         }
 
         if (filtered.isEmpty()) {
-            gg.drawString(this.font, Component.translatable("screen.orevision.nomatch"),
+            gg.drawString(this.font, Component.translatable(emptyKey()),
                     gridLeft() + 4, TOP + 4, 0xAAAAAA);
         }
 
@@ -251,16 +239,26 @@ public class TargetScreen extends Screen {
         if (hovered != null) {
             Block block = ForgeRegistries.BLOCKS.getValue(hovered);
             if (block != null) {
-                gg.renderTooltip(this.font, block.getName(), mouseX, mouseY);
+                gg.renderTooltip(this.font, Component.literal(BlockIndex.nameOf(hovered)), mouseX, mouseY);
             }
         }
 
         super.render(gg, mouseX, mouseY, partialTick);
     }
 
+    private String emptyKey() {
+        if (tab == Tab.MODDED && !TargetStore.includeModded()) {
+            return "screen.orevision.modded.hint";
+        }
+        return "screen.orevision.nomatch";
+    }
+
     private void renderTabs(GuiGraphics gg, int mouseX, int mouseY) {
         int x = gridLeft();
         for (Tab candidate : Tab.values()) {
+            if (candidate == Tab.MODDED && !TargetStore.includeModded() && !BlockIndex.building()) {
+                continue;
+            }
             Component label = candidate.label();
             int w = this.font.width(label) + 10;
             boolean active = candidate == tab;
@@ -270,6 +268,41 @@ public class TargetScreen extends Screen {
             gg.drawString(this.font, label, x + 5, TAB_Y + 3, active ? 0xFFFFFF : 0xBBBBBB, false);
             x += w + 3;
         }
+
+        Component toggle = toggleLabel();
+        int toggleW = this.font.width(toggle) + 10;
+        int toggleX = Math.max(x + 4, gridRight() - toggleW);
+        boolean hover = mouseX >= toggleX && mouseX < toggleX + toggleW
+                && mouseY >= TAB_Y && mouseY < TAB_Y + TAB_H;
+        boolean on = TargetStore.includeModded() || BlockIndex.building();
+        int background = on ? 0xFF2F7F4F : (hover ? 0x60FFFFFF : 0x40000000);
+        gg.fill(toggleX, TAB_Y, toggleX + toggleW, TAB_Y + TAB_H, background);
+        gg.drawString(this.font, toggle, toggleX + 5, TAB_Y + 3, on ? 0xFFFFFF : 0xBBBBBB, false);
+    }
+
+    private Component toggleLabel() {
+        if (BlockIndex.building()) {
+            return Component.translatable("screen.orevision.modded.building", BlockIndex.progress());
+        }
+        if (BlockIndex.failure() != null) {
+            return Component.translatable("screen.orevision.modded.failed");
+        }
+        if (TargetStore.includeModded()) {
+            return Component.translatable("screen.orevision.modded.on", BlockIndex.countLabel());
+        }
+        return Component.translatable("screen.orevision.modded.off");
+    }
+
+    private int toggleX() {
+        int x = gridLeft();
+        for (Tab candidate : Tab.values()) {
+            if (candidate == Tab.MODDED && !TargetStore.includeModded() && !BlockIndex.building()) {
+                continue;
+            }
+            x += this.font.width(candidate.label()) + 10 + 3;
+        }
+        int w = this.font.width(toggleLabel()) + 10;
+        return Math.max(x + 4, gridRight() - w);
     }
 
     private void renderSelectedPanel(GuiGraphics gg, int mouseX, int mouseY) {
@@ -280,19 +313,23 @@ public class TargetScreen extends Screen {
         gg.drawString(this.font, Component.translatable("screen.orevision.selected", targets.size()),
                 x, SEARCH_Y + 4, 0xFFFFFF);
 
+        int rowH = entryH();
         if (targets.isEmpty()) {
             gg.drawString(this.font, Component.translatable("screen.orevision.empty"), x, SEARCH_Y + 18, 0xAAAAAA);
         } else {
             for (int i = 0; i < targets.size(); i++) {
                 TargetStore.Target target = targets.get(i);
-                int y = SEARCH_Y + 20 + i * ENTRY_H;
+                int y = SEARCH_Y + 20 + i * rowH;
+                if (y + 12 > this.height - BOTTOM) {
+                    break;
+                }
 
                 // 颜色块：点它换色
                 gg.fill(x, y, x + 12, y + 12, 0xFF000000 | target.color());
                 gg.renderOutline(x, y, 12, 12, 0xFF000000);
 
                 // 名字：点它跳到列表里
-                String name = this.font.plainSubstrByWidth(nameOf(target.id()), RIGHT_W - 26);
+                String name = this.font.plainSubstrByWidth(BlockIndex.nameOf(target.id()), RIGHT_W - 26);
                 gg.drawString(this.font, name, x + 16, y + 2, 0xFFFFFF);
 
                 // 删除按钮
@@ -308,7 +345,7 @@ public class TargetScreen extends Screen {
 
     /** "最近"区域顶端的 y（紧跟已选列表）。 */
     private int recentTop(List<TargetStore.Target> targets) {
-        return SEARCH_Y + 20 + Math.max(1, targets.size()) * ENTRY_H + 8;
+        return SEARCH_Y + 20 + Math.max(1, targets.size()) * entryH() + 8;
     }
 
     private int recentColumns() {
@@ -375,8 +412,19 @@ public class TargetScreen extends Screen {
             return true;
         }
 
+        // 右上角的"模组方块"开关
+        int toggleX = toggleX();
+        int toggleW = this.font.width(toggleLabel()) + 10;
+        if (mouseX >= toggleX && mouseX < toggleX + toggleW && mouseY >= TAB_Y && mouseY < TAB_Y + TAB_H) {
+            toggleModdedBlocks();
+            return true;
+        }
+
         int x = gridLeft();
         for (Tab candidate : Tab.values()) {
+            if (candidate == Tab.MODDED && !TargetStore.includeModded() && !BlockIndex.building()) {
+                continue;
+            }
             int w = this.font.width(candidate.label()) + 10;
             if (mouseX >= x && mouseX < x + w && mouseY >= TAB_Y && mouseY < TAB_Y + TAB_H) {
                 tab = candidate;
@@ -398,10 +446,7 @@ public class TargetScreen extends Screen {
                     TargetStore.cycleColor(id);
                 } else {
                     if (!TargetStore.toggle(id)) {
-                        if (this.minecraft != null && this.minecraft.player != null) {
-                            this.minecraft.player.displayClientMessage(
-                                    Component.translatable("message.orevision.limit", TargetStore.MAX_TARGETS), true);
-                        }
+                        limitMessage();
                     }
                 }
                 OreOverlay.requestRescan();
@@ -416,8 +461,9 @@ public class TargetScreen extends Screen {
         int panelX = this.width - MARGIN - RIGHT_W;
         int firstRowY = SEARCH_Y + 20;
         List<TargetStore.Target> targets = TargetStore.targets();
+        int rowH = entryH();
         if (mouseX >= panelX && mouseX <= panelX + RIGHT_W && mouseY >= firstRowY) {
-            int index = (int) ((mouseY - firstRowY) / ENTRY_H);
+            int index = (int) ((mouseY - firstRowY) / rowH);
             if (index >= 0 && index < targets.size()) {
                 ResourceLocation id = targets.get(index).id();
                 if (mouseX >= panelX + RIGHT_W - 14) {
@@ -444,9 +490,8 @@ public class TargetScreen extends Screen {
             List<ResourceLocation> recent = TargetStore.recent();
             if (col >= 0 && col < columns && row >= 0 && row < rows && index < recent.size()) {
                 ResourceLocation id = recent.get(index);
-                if (!TargetStore.toggle(id) && this.minecraft != null && this.minecraft.player != null) {
-                    this.minecraft.player.displayClientMessage(
-                            Component.translatable("message.orevision.limit", TargetStore.MAX_TARGETS), true);
+                if (!TargetStore.toggle(id)) {
+                    limitMessage();
                 }
                 OreOverlay.requestRescan();
                 if (tab == Tab.SELECTED) {
@@ -456,6 +501,44 @@ public class TargetScreen extends Screen {
             }
         }
         return false;
+    }
+
+    /** 开关模组方块：打开就后台建索引，关闭就清掉已选的模组方块并释放索引。 */
+    private void toggleModdedBlocks() {
+        if (BlockIndex.building()) {
+            return;
+        }
+        if (TargetStore.includeModded()) {
+            TargetStore.setIncludeModded(false);
+            int removed = TargetStore.removeModded();
+            TargetStore.save();
+            BlockIndex.dropFull();
+            tab = Tab.ALL;
+            refreshFilter(searchBox.getValue());
+            OreOverlay.requestRescan();
+            message(Component.translatable("message.orevision.modded.off", removed));
+        } else {
+            TargetStore.setIncludeModded(true);
+            TargetStore.save();
+            if (BlockIndex.hasFull()) {
+                refreshFilter(searchBox.getValue());
+                message(Component.translatable("message.orevision.modded.on", BlockIndex.countLabel()));
+            } else {
+                BlockIndex.startFullBuild();
+                message(Component.translatable("message.orevision.modded.scanning"));
+            }
+        }
+    }
+
+    private void message(Component text) {
+        Minecraft mc = this.minecraft;
+        if (mc != null && mc.player != null) {
+            mc.player.displayClientMessage(text, true);
+        }
+    }
+
+    private void limitMessage() {
+        message(Component.translatable("message.orevision.limit", TargetStore.MAX_TARGETS));
     }
 
     /** 在右侧点某个已选项 → 切到"已选"标签并把它滚到看得见的位置。 */
@@ -495,74 +578,8 @@ public class TargetScreen extends Screen {
         return false;
     }
 
-    /** 0 = 矿石，1 = 建筑，2 = 植物，3 = 红石/功能，4 = 其他。 */
-    private static int categoryOf(ResourceLocation id) {
-        Integer cached = CATEGORIES.get(id);
-        if (cached != null) {
-            return cached;
-        }
-        String path = id.getPath();
-        int category = 4;
-        if (containsAny(path, ORE_WORDS) || ORE_EXTRA.contains(path)) {
-            category = 0;
-        } else if (containsAny(path, PLANT_WORDS)) {
-            category = 2;
-        } else if (containsAny(path, REDSTONE_WORDS)) {
-            category = 3;
-        } else if (containsAny(path, BUILDING_WORDS)) {
-            category = 1;
-        }
-        CATEGORIES.put(id, category);
-        return category;
-    }
-
-    private static boolean containsAny(String path, String[] words) {
-        for (String word : words) {
-            if (path.contains(word)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static String nameOf(ResourceLocation id) {
-        String cached = NAMES.get(id);
-        if (cached != null) {
-            return cached;
-        }
-        Block block = ForgeRegistries.BLOCKS.getValue(id);
-        String name = block == null ? id.toString() : block.getName().getString();
-        NAMES.put(id, name);
-        return name;
-    }
-
-    /** 拼音键：全拼和首字母的多个变体拼在一起，直接 contains 即可。 */
-    private static String pinyinOf(ResourceLocation id) {
-        return PINYIN.computeIfAbsent(id, key -> Pinyin.key(nameOf(key)));
-    }
-
     private static ItemStack stackOf(Block block) {
         return STACKS.computeIfAbsent(block.builtInRegistryHolder().key().location(),
                 key -> new ItemStack(block.asItem()));
-    }
-
-    /** 原版全部方块，按本地化名字排序；只取一次。 */
-    private static List<ResourceLocation> allBlocks() {
-        if (allBlocks == null) {
-            List<ResourceLocation> list = new ArrayList<>();
-            for (Block block : ForgeRegistries.BLOCKS.getValues()) {
-                ResourceLocation id = ForgeRegistries.BLOCKS.getKey(block);
-                if (id == null || !"minecraft".equals(id.getNamespace())) {
-                    continue;
-                }
-                if (HIDDEN.contains(id.getPath()) || block instanceof LiquidBlock) {
-                    continue;
-                }
-                list.add(id);
-            }
-            list.sort(Comparator.comparing(TargetScreen::nameOf));
-            allBlocks = list;
-        }
-        return allBlocks;
     }
 }
